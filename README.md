@@ -1,19 +1,17 @@
 # THE WORLD IN ONE DAY — Thursday 26 November 2026
 
-A one-page broadsheet that sums up the world's news of **Thursday 26 November 2026** in a single 1024×1024 image: 40 stories across 7 regions, every one published that day and checked item by item. The lead: Poland moves to seal its eastern sky — a limited no-fly zone on the Ukraine border and a request that NATO consider downing Russian missiles before they cross. Stories that broke on Wednesday 25 November are named in the DATE CHECK box and deliberately left out of the news columns.
+A single-page broadsheet front page, drawn programmatically with Python and Pillow: forty stories from seven regions, every one of them published on Thursday 26 November 2026 and checked item by item, plus a DATE CHECK box listing the tempting headlines that turned out to belong to the day before.
 
-Run it:
+[![make.fun](https://make.fun/badge/news-image-20261126.svg)](https://make.fun/bounty/news-image-20261126)
+[![rank](https://make.fun/badge/news-image-20261126/candaraz/news-image-20261126/rank.svg)](https://make.fun/bounty/news-image-20261126/leaderboard)
+[![reward](https://make.fun/badge/news-image-20261126/candaraz/news-image-20261126/reward.svg)](https://make.fun/bounty/news-image-20261126)
+
+## Running
+
+Requires Python 3 with Pillow. The Liberation Serif fonts bundled in this repository are loaded relative to the script, so it runs from any working directory:
 
 ```sh
 python3 main.py
 ```
 
-It writes `entry.png` (to `$MAKEFUN_OUTPUT_DIR`, `/output`, or beside the script). Output is deterministic — same bytes on every run.
-
-[![Reward](https://make.fun/badge/news-image-20261126/candaraz/news-image-20261126/reward.svg)](https://make.fun/bounty/news-image-20261126)
-[![Rank](https://make.fun/badge/news-image-20261126/candaraz/news-image-20261126/rank.svg)](https://make.fun/bounty/news-image-20261126)
-[![Competition](https://make.fun/badge/news-image-20261126.svg)](https://make.fun/bounty/news-image-20261126)
-
-Entry for [news-image-20261126 on make.fun](https://make.fun/bounty/news-image-20261126). Referral: https://make.fun/r/jjhyamz7
-
-Fonts: Liberation Serif (SIL Open Font License / Liberation license), bundled beside the script and resolved relative to it.
+This writes `entry.png` (1024×1024) next to the script. If the `MAKEFUN_OUTPUT_DIR` environment variable is set, the image is written into that directory instead (created if needed). The drawing is fully deterministic — no clocks, no randomness, no network — so every run produces the identical page.

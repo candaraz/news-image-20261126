@@ -1,120 +1,96 @@
 #!/usr/bin/env python3
-"""THE WORLD IN ONE DAY - news-image-20261126 entry generator.
+"""Render the "THE WORLD IN ONE DAY" front page for Thursday 26 November 2026.
 
-Renders a dense one-page broadsheet of Thursday 26 November 2026 world
-news to entry.png (1024x1024). Every story below was published on
-26 November 2026 and checked item by item against the day's reporting
-(Reuters, BBC, Al Jazeera and the wires). Stories that broke on
-Wednesday 25 November are listed separately in the DATE CHECK box and
-deliberately left out of the news columns.
+A single-page newspaper made entirely of deterministic PIL drawing calls:
+no clocks, no randomness, no network.  The page is laid out on a 1024x1024
+canvas with three story columns, a lead story box with a small radar/sector
+diagram, a date-check panel, and a footer crediting the day's wires.
 
-Deterministic: pure PIL drawing, no clocks, no randomness.
-Fonts resolve relative to this script file, never the CWD.
+The rendered PNG is written as ``entry.png`` into the directory named by the
+MAKEFUN_OUTPUT_DIR environment variable (created when missing); when the
+variable is unset the file lands next to this script.
 """
 
 import os
+
 from PIL import Image, ImageDraw, ImageFont
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+# --------------------------------------------------------------------------
+# Palette
+# --------------------------------------------------------------------------
+PAPER = (247, 242, 231)     # page background
+INK = (26, 24, 20)          # headlines, rules, section bars
+LEADBG = (240, 234, 216)    # lead story box fill
+DCBG = (238, 230, 210)      # date-check panel fill
+RED = (163, 22, 33)         # accents: tagline, lead headline, panel frame
+FAINT = (96, 88, 74)        # footer, dateline centre, diagram ticks
+BODY = (52, 48, 40)         # story body copy
 
-W, H = 1024, 1024
-PAPER = (247, 242, 231)
-INK = (26, 24, 20)
-FAINT = (96, 88, 74)
-ACCENT = (163, 22, 33)
-BOXBG = (238, 230, 210)
-LEADBG = (240, 234, 216)
+# --------------------------------------------------------------------------
+# Geometry
+# --------------------------------------------------------------------------
+PAGE = 1024
+EDGE = 28                   # left/right margin of the content span
+SPAN = PAGE - EDGE          # 996, right edge of the content span
+COLW = 312                  # story column width
+COLX = (28, 356, 684)       # story column left edges
+BARH = 18                   # section bar height
 
-
-def font(name, size):
-    return ImageFont.truetype(os.path.join(HERE, name), size)
-
-
-F_SERIF = "LiberationSerif-Regular.ttf"
-F_BOLD = "LiberationSerif-Bold.ttf"
-F_ITALIC = "LiberationSerif-Italic.ttf"
-
-KICKER = font(F_BOLD, 13)
-MASTHEAD = font(F_BOLD, 63)
-DATELINE = font(F_SERIF, 15)
-DATELINE_B = font(F_BOLD, 15)
-LEAD_HEAD = font(F_BOLD, 29)
-LEAD_DECK = font(F_SERIF, 14.5)
-SECT = font(F_BOLD, 13)
-HEAD = font(F_BOLD, 11.5)
-DECK = font(F_SERIF, 10)
-BOX_HEAD = font(F_BOLD, 12.5)
-BOX_TXT = font(F_SERIF, 10)
-FOOT = font(F_ITALIC, 10.5)
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def wrap(draw, text, fnt, max_w):
-    """Greedy word wrap; returns list of lines."""
-    words = text.split()
-    lines, cur = [], ""
-    for w_ in words:
-        trial = (cur + " " + w_).strip()
-        if draw.textlength(trial, font=fnt) <= max_w or not cur:
-            cur = trial
+def serif(weight, size):
+    """Load one of the Liberation Serif faces bundled beside this script."""
+    path = os.path.join(SCRIPT_DIR, "LiberationSerif-%s.ttf" % weight)
+    return ImageFont.truetype(path, size)
+
+
+# Type sizes (several are fractional on purpose: the page was designed with
+# them, and FreeType honours fractional pixel sizes).
+F_TAGLINE = serif("Bold", 13)
+F_MASTHEAD = serif("Bold", 63)
+F_DATELINE = serif("Bold", 15)
+F_DATELINE_R = serif("Regular", 15)
+F_LEAD_HEAD = serif("Bold", 29)
+F_LEAD_BODY = serif("Regular", 14.5)
+F_BAR = serif("Bold", 13)
+F_HEADLINE = serif("Bold", 11.5)
+F_BODY = serif("Regular", 10)
+F_DC_TITLE = serif("Bold", 12.5)
+F_DC_ITEM = serif("Regular", 10)
+F_FOOTER = serif("Italic", 10.5)
+
+MEASURE = ImageDraw.Draw(Image.new("RGB", (8, 8)))
+
+
+def text_width(text, font):
+    return MEASURE.textlength(text, font=font)
+
+
+def wrap(text, font, width):
+    """Greedy word wrap: pack whole words while the line fits ``width``."""
+    lines = []
+    current = ""
+    for word in text.split(" "):
+        trial = word if not current else current + " " + word
+        if current and text_width(trial, font) > width:
+            lines.append(current)
+            current = word
         else:
-            lines.append(cur)
-            cur = w_
-    if cur:
-        lines.append(cur)
+            current = trial
+    if current:
+        lines.append(current)
     return lines
 
 
-def draw_story(draw, x, y, col_w, head, deck):
-    """One headline + one-line deck; returns y after the story."""
-    for ln in wrap(draw, head, HEAD, col_w):
-        draw.text((x, y), ln, font=HEAD, fill=INK)
-        y += 13
-    for ln in wrap(draw, deck, DECK, col_w):
-        draw.text((x, y), ln, font=DECK, fill=(52, 48, 40))
-        y += 11.5
-    return y + 5.0
-
-
-def draw_section(draw, x, y, col_w, title, stories):
-    """Section header bar followed by its stories."""
-    draw.rectangle([x, y, x + col_w, y + 17], fill=INK)
-    draw.text((x + 6, y + 2.5), title, font=SECT, fill=PAPER)
-    y += 23
-    for head, deck in stories:
-        y = draw_story(draw, x, y, col_w, head, deck)
-    return y + 4
-
-
-def draw_airshield(draw, x, y, w_, h_):
-    """Geometric air-defence motif: radar arcs over a horizon, one
-    incoming track broken by the shield arc."""
-    base = y + h_ - 12
-    cx = x + w_ // 2
-    # horizon and ground ticks
-    draw.line([x + 4, base, x + w_ - 4, base], fill=INK, width=3)
-    for gx in range(x + 14, x + w_ - 8, 22):
-        draw.line([gx, base, gx, base + 6], fill=FAINT, width=2)
-    # concentric shield arcs
-    for r in (34, 56, 78):
-        draw.arc([cx - r, base - r, cx + r, base + r], start=180, end=360,
-                 fill=INK, width=3)
-    # radar sweep
-    draw.line([cx, base, cx - 52, base - 52], fill=ACCENT, width=3)
-    # incoming track, stopped at the outer arc
-    draw.line([x + w_ - 16, y + 6, cx + 62, base - 62], fill=ACCENT, width=3)
-    draw.line([cx + 62 - 9, base - 62, cx + 62, base - 62], fill=ACCENT, width=3)
-    draw.line([cx + 62, base - 62 - 9, cx + 62, base - 62], fill=ACCENT, width=3)
-    # burst where the track ends
-    for dx, dy in ((-8, -8), (0, -11), (8, -8), (-11, 0), (11, 0)):
-        draw.line([cx + 62, base - 62, cx + 62 + dx, base - 62 + dy],
-                  fill=INK, width=2)
-    # launcher block at centre
-    draw.rectangle([cx - 12, base - 12, cx + 12, base], outline=INK, width=3)
-    draw.line([cx, base - 12, cx, base - 22], fill=INK, width=3)
-
-
-# ---------------------------------------------------------------- stories
-# Every item: published Thursday 26 November 2026, verified item by item.
+# --------------------------------------------------------------------------
+# Page furniture (fixed strings)
+# --------------------------------------------------------------------------
+TAGLINE = "ONE IMAGE  \u00b7  EVERY STORY CHECKED AGAINST THE DAY ITSELF"
+MASTHEAD = "THE WORLD IN ONE DAY"
+DATELINE_LEFT = "Thursday 26 November 2026"
+DATELINE_MID = "40 stories \u00b7 7 regions \u00b7 one page"
+DATELINE_RIGHT = "No. 26 \u2014 Daily Edition"
 
 LEAD_HEADLINE = "POLAND MOVES TO SEAL ITS EASTERN SKY"
 LEAD_TEXT = (
@@ -124,11 +100,35 @@ LEAD_TEXT = (
     "consider downing Russian missiles over Ukraine before they cross."
 )
 
-ASIA_PACIFIC = [
+DC_TITLE = ("DATE CHECK \u2014 reported Wednesday 25 November, checked and "
+            "deliberately left out:")
+DC_LEFT = [
+    "Huawei convicted in New York on 10 of 12 counts",
+    "US proposes tariffs on China and 13 other partners",
+    "Army detonates lead azide stockpile in Iowa",
+    "North Korea expels Swiss diplomat in sanctions row",
+]
+DC_RIGHT = [
+    "Duran Duran guitarist Andy Taylor dies, aged 65",
+    "Colombia supermarket siege ends; hostages freed",
+    "Ramaphosa wins reprieve in the Farmgate case",
+    "Medicare sets 2028 prices for 13 drugs",
+]
+
+FOOTER = ("Every story above was published on Thursday 26 November 2026 and "
+          "checked item by item. Sources: Reuters \u00b7 BBC \u00b7 Al Jazeera "
+          "\u00b7 AFP \u00b7 AP and the day's wires.")
+
+# --------------------------------------------------------------------------
+# Story data: (section label, [(headline, body-or-None), ...])
+# --------------------------------------------------------------------------
+ASIA = ("ASIA-PACIFIC", [
     ("Rescuers resume search for 13 trapped miners",
-     "Thirteen are already confirmed dead in the flooded illegal gold mine in Bogor, West Java."),
+     "Thirteen are already confirmed dead in the flooded illegal gold mine "
+     "in Bogor, West Java."),
     ("Bank of Korea raises its rate to 3.25%",
-     "A 25-point hike resumes tightening as a chip-led export boom keeps inflation high."),
+     "A 25-point hike resumes tightening as a chip-led export boom keeps "
+     "inflation high."),
     ("China lands its biggest Boeing order since 2013",
      "Fifty jets worth $7.4 billion, finalised as trade tensions run on."),
     ("Kim Jong Un urges wider tactical-nuke deployment",
@@ -137,13 +137,21 @@ ASIA_PACIFIC = [
      "More Japanese companies abroad report tougher Chinese competition."),
     ("Australia enacts online safety law",
      "Platforms face fines of up to 5% of global revenue under the new act."),
-]
-
-EUROPE = [
+])
+SPORT = ("SPORT", [
+    ("Man Utd held by Sporting amid disputed decisions",
+     "Frustration reigns for Pochettino in a chaotic start to the job."),
+    ("Borthwick: All Blacks tests are 'World Cup practice'",
+     "England's coach frames the Nations Championship clashes."),
+    ("U2 salute Dolly Parton at NFL Thanksgiving Eve show",
+     "The band recreated their 'Tom' duet at the halftime show."),
+])
+EUROPE = ("EUROPE", [
     ("UK to publish new treaties agreed with the EU",
      "The texts carry a 10-year clause covering rebuilt border-check costs."),
     ("UK opens inquiry into nuclear-test veterans",
-     "An independent review will examine the tests' impact on veterans and families."),
+     "An independent review will examine the tests' impact on veterans and "
+     "families."),
     ("Puigdemont to return to Spain on 12 December",
      "The Catalan separatist leader ends years of self-imposed exile."),
     ("Norway court voids climate-disputed oil licences",
@@ -151,10 +159,10 @@ EUROPE = [
     ("Germany begins rebuilding the Eagle's Nest",
      "Work starts on Hitler's fire-damaged mountain retreat in Bavaria."),
     ("Six-day global heat streak smashes the record",
-     "Six straight days ran 2C above pre-industrial levels, the Guardian reports."),
-]
-
-WAR_UKRAINE = [
+     "Six straight days ran 2C above pre-industrial levels, the Guardian "
+     "reports."),
+])
+WAR = ("WAR IN UKRAINE", [
     ("Ukraine strikes Russian air base; five jets hit",
      "Kyiv says five military aircraft were struck in the attack."),
     ("Ukraine downs 88 of 112 Russian drones overnight",
@@ -163,9 +171,14 @@ WAR_UKRAINE = [
      "Ukraine's security service claims a pair of key oil plants hit."),
     ("Kyiv's commander helps Norway harden air defences",
      "Ukraine's chief assists Norwegian forces along the Russian border."),
-]
-
-AMERICAS = [
+])
+TECH = ("TECH, AI & MARKETS", [
+    ("Asia shares bounce as AI rout and tariffs linger",
+     "The Nikkei gained 1.6% and Seoul 1.9% in a rare November rally."),
+    ("Nvidia ends down 3.9% at $149.30",
+     "The stock sits $2.3 trillion below its October peak."),
+])
+AMERICAS = ("AMERICAS", [
     ("California braces for Thanksgiving flooding",
      "Storms and king tides threaten both US coasts over the holiday."),
     ("Macy's postpones its Thanksgiving parade",
@@ -176,9 +189,8 @@ AMERICAS = [
      "The figure is published as a key step toward restructuring."),
     ("Peru shuts dozens of ports as currents batter coast",
      "Powerful swells damage the shoreline and halt traffic."),
-]
-
-MIDDLE_EAST_AFRICA = [
+])
+MEAST = ("MIDDLE EAST & AFRICA", [
     ("Fuel tanker fire kills 31 on a Cairo highway",
      "The tanker crashed and burst into flames on the capital's outskirts."),
     ("Israeli judges urge dropping top Netanyahu charges",
@@ -189,136 +201,173 @@ MIDDLE_EAST_AFRICA = [
      "The senior official died with family members in the strike."),
     ("Saudi-led coalition intercepts four drones",
      "The drones were brought down over the Eastern Province."),
+])
+MEAST_MORE = ("MIDDLE EAST & AFRICA \u2014 MORE", [
     ("Two tankers strike mines in the Strait of Hormuz",
      "Oil climbs as shipping through the strait is disrupted."),
     ("Nigeria seizes $220 million of methamphetamine",
      "Five Mexican suspects are arrested in the large-scale bust."),
     ("Ghana unveils 'Heritage Series' banknotes",
      "The notes honour Nkrumah, Kofi Annan and Makola traders."),
-    ("Kenya discharges its last Ebola patient",
-     "In Congo, the outbreak's death toll has passed 5,300."),
-]
-
-TECH_MARKETS = [
-    ("Asia shares bounce as AI rout and tariffs linger",
-     "The Nikkei gained 1.6% and Seoul 1.9% in a rare November rally."),
-    ("Nvidia ends down 3.9% at $149.30",
-     "The stock sits $2.3 trillion below its October peak."),
+    ("Kenya discharges its last Ebola patient", None),
+])
+TECH_MORE = ("TECH, AI & MARKETS \u2014 MORE", [
     ("US approves SpaceX plan for a million satellites",
      "Regulators clear the vast data-satellite constellation."),
     ("OPEC+ meets on 29 November over 2027 output",
      "Ministers must weigh the UAE's exit and capacity claims."),
     ("Microdrama revenue to hit $20 billion in 2026",
      "Profits outside China remain thin, a new industry report finds."),
-    ("Scientists find lakes beneath the Red Sea",
-     "The mysterious lakes lie more than a mile below the surface."),
-]
+    ("Scientists find lakes beneath the Red Sea", None),
+])
 
-SPORT = [
-    ("Man Utd held by Sporting amid disputed decisions",
-     "Frustration reigns for Pochettino in a chaotic start to the job."),
-    ("Borthwick: All Blacks tests are 'World Cup practice'",
-     "England's coach frames the Nations Championship clashes."),
-    ("U2 salute Dolly Parton at NFL Thanksgiving Eve show",
-     "The band recreated their 'Torn' duet at the halftime show."),
-]
 
-DATE_CHECK = [
-    "Huawei convicted in New York on 10 of 12 counts",
-    "US proposes tariffs on China and 13 other partners",
-    "Army detonates lead azide stockpile in Iowa",
-    "North Korea expels Swiss diplomat in sanctions row",
-    "Duran Duran guitarist Andy Taylor dies, aged 65",
-    "Colombia supermarket siege ends; hostages freed",
-    "Ramaphosa wins reprieve in the Farmgate case",
-    "Medicare sets 2028 prices for 13 drugs",
-]
+# --------------------------------------------------------------------------
+# Drawing helpers
+# --------------------------------------------------------------------------
+def centred_x(text, font):
+    """Float left edge that centres ``text`` on the page (subpixel-exact)."""
+    return (PAGE - text_width(text, font)) / 2.0
+
+
+def draw_header(d):
+    d.rectangle([EDGE, 16, SPAN, 17], fill=INK)
+    d.text((centred_x(TAGLINE, F_TAGLINE), 22), TAGLINE,
+           font=F_TAGLINE, fill=RED)
+    d.text((centred_x(MASTHEAD, F_MASTHEAD), 40), MASTHEAD,
+           font=F_MASTHEAD, fill=INK)
+    d.rectangle([EDGE, 115, SPAN, 118], fill=INK)
+    d.rectangle([EDGE, 122, SPAN, 122], fill=INK)
+    d.text((EDGE, 128), DATELINE_LEFT, font=F_DATELINE, fill=INK)
+    d.text((centred_x(DATELINE_MID, F_DATELINE_R), 128), DATELINE_MID,
+           font=F_DATELINE_R, fill=FAINT)
+    d.text((SPAN - text_width(DATELINE_RIGHT, F_DATELINE_R), 128),
+           DATELINE_RIGHT, font=F_DATELINE_R, fill=INK)
+    d.rectangle([EDGE, 150, SPAN, 150], fill=INK)
+
+
+def draw_diagram(d):
+    """Radar/sector diagram inside the lead box: three range arcs over a
+    baseline, a signal beam, a small tower, and a plane glyph."""
+    cx, cy = 130, 252
+    d.rectangle([50, 251, 210, 253], fill=INK)                    # baseline
+    for radius in (78, 56, 34):                                   # range arcs
+        d.arc([cx - radius, cy - radius, cx + radius, cy + radius],
+              180, 360, fill=INK, width=3)
+    d.line([(78, 200), (130, 252)], fill=RED, width=5)            # beam
+    for tx in (60, 82, 104, 126, 148, 170, 192):                  # scale ticks
+        d.rectangle([tx, 252, tx + 1, 258], fill=FAINT)
+    d.rectangle([118, 240, 142, 252], outline=INK, width=3)       # tower block
+    d.rectangle([129, 230, 131, 242], fill=INK)                   # antenna
+    # plane glyph
+    d.line([(198, 178), (193, 188)], fill=RED, width=3)
+    d.line([(193, 181), (193, 187)], fill=RED, width=1)
+    d.line([(183, 191), (191, 191)], fill=RED, width=1)
+    d.rectangle([191, 179, 192, 188], fill=INK)
+    d.line([(183, 181), (192, 190)], fill=INK, width=2)
+    d.line([(199, 183), (192, 190)], fill=INK, width=2)
+    d.polygon([(181, 189), (194, 189), (203, 190),
+               (203, 191), (192, 191), (181, 190)], fill=INK)
+
+
+def draw_lead(d):
+    d.rectangle([30, 160, 994, 274], fill=LEADBG)
+    d.rectangle([EDGE, 158, SPAN, 159], fill=INK)
+    d.rectangle([EDGE, 275, SPAN, 276], fill=INK)
+    d.rectangle([EDGE, 158, EDGE + 1, 276], fill=INK)
+    d.rectangle([SPAN - 1, 158, SPAN, 276], fill=INK)
+    draw_diagram(d)
+    d.text((236, 168), LEAD_HEADLINE, font=F_LEAD_HEAD, fill=RED)
+    y = 204
+    for line in wrap(LEAD_TEXT, F_LEAD_BODY, 758):
+        d.text((236, y), line, font=F_LEAD_BODY, fill=INK)
+        y += 18
+
+
+def draw_story(d, x, pen, headline, body, width):
+    """Draw one story at the pen position; return the advanced pen."""
+    d.text((x, pen), headline, font=F_HEADLINE, fill=INK)
+    lines = wrap(body, F_BODY, width) if body else []
+    for i, line in enumerate(lines):
+        d.text((x, pen + 13 + i * 11.5), line, font=F_BODY, fill=BODY)
+    return pen + 13 + max(0, len(lines) - 1) * 11.5 + 16.5
+
+
+def draw_section(d, x, bar_y, pen, section, width):
+    """Draw a section bar plus its stories; return (next bar y, next pen)."""
+    label, stories = section
+    d.rectangle([x, bar_y, x + width, bar_y + BARH - 1], fill=INK)
+    d.text((x + 6, pen - 20.5), label, font=F_BAR, fill=PAPER)
+    for headline, body in stories:
+        pen = draw_story(d, x, pen, headline, body, width)
+    import math
+    return math.ceil(pen + 3.5), pen + 27.0
+
+
+def draw_column(d, x, sections):
+    bar_y, pen = 292, 315.0
+    for section in sections:
+        bar_y, pen = draw_section(d, x, bar_y, pen, section, COLW)
+        # draw_section returns the following section's start pen as its
+        # second value only when another section follows; recompute start:
+        pen = pen  # start pen for the next section (bar_y already advanced)
+
+
+HAIRLINE = (190, 180, 158)
+
+
+def draw_hairlines(d):
+    """Pale vertical rules in the two column gutters, behind the stories."""
+    for gx in (348, 676):
+        d.line([(gx, 292), (gx, 852)], fill=HAIRLINE)
+
+
+def draw_bottom(d):
+    for x, section in ((EDGE, MEAST_MORE), (520, TECH_MORE)):
+        bar_y, pen = 740, 763.5
+        label, stories = section
+        d.rectangle([x, bar_y, x + 476, bar_y + BARH - 1], fill=INK)
+        d.text((x + 6, pen - 20.5), label, font=F_BAR, fill=PAPER)
+        for headline, body in stories:
+            pen = draw_story(d, x, pen, headline, body, 476)
+
+
+def draw_date_check(d):
+    d.rectangle([30, 868, 994, 960], fill=DCBG)
+    d.rectangle([EDGE, 866, SPAN, 962], outline=RED, width=2)
+    d.text((40, 874), DC_TITLE, font=F_DC_TITLE, fill=RED)
+    for i, item in enumerate(DC_LEFT):
+        d.text((40, 898 + i * 15), "x  " + item, font=F_DC_ITEM, fill=INK)
+    for i, item in enumerate(DC_RIGHT):
+        d.text((516, 898 + i * 15), "x  " + item, font=F_DC_ITEM, fill=INK)
+
+
+def draw_footer(d):
+    d.rectangle([EDGE, 972, SPAN, 973], fill=INK)
+    d.text((centred_x(FOOTER, F_FOOTER), 979), FOOTER,
+           font=F_FOOTER, fill=FAINT)
 
 
 def render():
-    img = Image.new("RGB", (W, H), PAPER)
-    d = ImageDraw.Draw(img)
-    M = 28  # page margin
+    page = Image.new("RGB", (PAGE, PAGE), PAPER)
+    d = ImageDraw.Draw(page)
+    draw_header(d)
+    draw_lead(d)
+    draw_hairlines(d)
+    draw_column(d, COLX[0], [ASIA, SPORT])
+    draw_column(d, COLX[1], [EUROPE, WAR, TECH])
+    draw_column(d, COLX[2], [AMERICAS, MEAST])
+    draw_bottom(d)
+    draw_date_check(d)
+    draw_footer(d)
+    return page
 
-    # --- masthead ------------------------------------------------------
-    d.line([M, 16, W - M, 16], fill=INK, width=2)
-    kick = "ONE IMAGE  ·  EVERY STORY CHECKED AGAINST THE DAY ITSELF"
-    d.text(((W - d.textlength(kick, font=KICKER)) / 2, 22), kick, font=KICKER, fill=ACCENT)
-    title = "THE WORLD IN ONE DAY"
-    d.text(((W - d.textlength(title, font=MASTHEAD)) / 2, 40), title, font=MASTHEAD, fill=INK)
-    d.line([M, 116, W - M, 116], fill=INK, width=4)
-    d.line([M, 122, W - M, 122], fill=INK, width=1)
-    left = "Thursday 26 November 2026"
-    d.text((M, 128), left, font=DATELINE_B, fill=INK)
-    mid = "40 stories · 7 regions · one page"
-    d.text(((W - d.textlength(mid, font=DATELINE)) / 2, 128), mid, font=DATELINE, fill=FAINT)
-    right = "No. 26 — Daily Edition"
-    d.text((W - M - d.textlength(right, font=DATELINE), 128), right, font=DATELINE, fill=INK)
-    d.line([M, 150, W - M, 150], fill=INK, width=1)
 
-    # --- lead panel ----------------------------------------------------
-    ly = 158
-    d.rectangle([M, ly, W - M, ly + 118], fill=LEADBG, outline=INK, width=2)
-    draw_airshield(d, M + 18, ly + 14, 168, 92)
-    tx = M + 208
-    tw = W - M - tx - 14
-    yy = ly + 10
-    for ln in wrap(d, LEAD_HEADLINE, LEAD_HEAD, tw):
-        d.text((tx, yy), ln, font=LEAD_HEAD, fill=ACCENT)
-        yy += 34
-    yy += 2
-    for ln in wrap(d, LEAD_TEXT, LEAD_DECK, tw):
-        d.text((tx, yy), ln, font=LEAD_DECK, fill=INK)
-        yy += 18
-
-    # --- body columns --------------------------------------------------
-    top = 292
-    col_w = (W - 2 * M - 2 * 16) // 3
-    xs = [M, M + col_w + 16, M + 2 * (col_w + 16)]
-    for x in xs[1:]:
-        d.line([x - 8, top, x - 8, 852], fill=(190, 180, 158), width=1)
-
-    y1 = draw_section(d, xs[0], top, col_w, "ASIA-PACIFIC", ASIA_PACIFIC)
-    y1 = draw_section(d, xs[0], y1, col_w, "SPORT", SPORT)
-    y2 = draw_section(d, xs[1], top, col_w, "EUROPE", EUROPE)
-    y2 = draw_section(d, xs[1], y2, col_w, "WAR IN UKRAINE", WAR_UKRAINE)
-    y2 = draw_section(d, xs[1], y2, col_w, "TECH, AI & MARKETS", TECH_MARKETS[:2])
-    y3 = draw_section(d, xs[2], top, col_w, "AMERICAS", AMERICAS)
-    y3 = draw_section(d, xs[2], y3, col_w, "MIDDLE EAST & AFRICA", MIDDLE_EAST_AFRICA[:5])
-
-    # second row of sections under the columns, full width pairs
-    by = max(y1, y2, y3) + 2
-    half = (W - 2 * M - 16) // 2
-    draw_section(d, M, by, half, "MIDDLE EAST & AFRICA — MORE", MIDDLE_EAST_AFRICA[5:])
-    draw_section(d, M + half + 16, by, half, "TECH, AI & MARKETS — MORE", TECH_MARKETS[2:])
-
-    # --- date check box -------------------------------------------------
-    by2 = 866
-    d.rectangle([M, by2, W - M, by2 + 96], fill=BOXBG, outline=ACCENT, width=2)
-    d.text((M + 12, by2 + 8),
-           "DATE CHECK — reported Wednesday 25 November, checked and deliberately left out:",
-           font=BOX_HEAD, fill=ACCENT)
-    half_items = (len(DATE_CHECK) + 1) // 2
-    for i, item in enumerate(DATE_CHECK):
-        cx = M + 12 + (i // half_items) * half
-        cy = by2 + 32 + (i % half_items) * 15
-        d.text((cx, cy), "x  " + item, font=BOX_TXT, fill=INK)
-
-    # --- footer ----------------------------------------------------------
-    fy = by2 + 106
-    d.line([M, fy, W - M, fy], fill=INK, width=2)
-    foot = ("Every story above was published on Thursday 26 November 2026 and checked item by item. "
-            "Sources: Reuters · BBC · Al Jazeera · AFP · AP and the day's wires.")
-    d.text(((W - d.textlength(foot, font=FOOT)) / 2, fy + 7), foot, font=FOOT, fill=FAINT)
-
-    # --- save ------------------------------------------------------------
-    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR")
-    if not out_dir:
-        out_dir = "/output" if os.path.isdir("/output") and os.access("/output", os.W_OK) else HERE
-    path = os.path.join(out_dir, "entry.png")
-    img.save(path, format="PNG")
-    return path
+def main():
+    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR") or SCRIPT_DIR
+    os.makedirs(out_dir, exist_ok=True)
+    render().save(os.path.join(out_dir, "entry.png"))
 
 
 if __name__ == "__main__":
-    print(render())
+    main()
