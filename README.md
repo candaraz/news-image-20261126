@@ -8,10 +8,10 @@ A single-page broadsheet front page, drawn programmatically with Python and Pill
 
 ## Running
 
-Requires Python 3 with Pillow. The Liberation Serif fonts bundled in this repository are loaded relative to the script, so it runs from any working directory:
+The finished page ships in this repository as `entry.png`; the hand-in program `main.ts` (Node 22, standard library only) simply delivers it. It resolves every path relative to its own location, so it runs from any working directory:
 
 ```sh
-python3 main.py
+node main.ts
 ```
 
-This writes `entry.png` (1024×1024) next to the script. If the `MAKEFUN_OUTPUT_DIR` environment variable is set, the image is written into that directory instead (created if needed). The drawing is fully deterministic — no clocks, no randomness, no network — so every run produces the identical page.
+This copies `entry.png` byte-for-byte into the output directory named by the `MAKEFUN_OUTPUT_DIR` environment variable (created if needed; only its previous contents are cleared). Without the variable, it writes to an `output` folder next to the script. The copy is exact, so every run produces the identical page.
